@@ -1,0 +1,76 @@
+# Alpine-Maintainer: Bart Ribbers <bribbers@disroot.org>
+# Maintainer: Felix Xing <fxing@qnx.com>
+pkgname=qt6-svg
+pkgver=6.10.0
+pkgrel=0
+pkgdesc="Classes for displaying the contents of SVG files"
+url="https://qt.io/"
+arch="all"
+license="LGPL-2.1-only AND LGPL-3.0-only AND GPL-3.0-only AND Qt-GPL-exception-1.0"
+depends="libc++
+        qnx-egl
+        qnx-gles
+        qnx-io-sock
+        qt6-base
+        zlib-ng"
+depends_dev="vulkan-headers clang libc++-dev"
+makedepends="$depends_dev
+    cmake
+    perl
+    qt6-base-dev
+    qt6-base-private-dev
+    ninja
+    "
+subpackages="$pkgname-dev"
+options="!check" # No tests
+builddir="$srcdir/qtsvg-everywhere-src-${pkgver/_/-}"
+
+source="https://download.qt.io/official_releases/qt/${pkgver%.*}/${pkgver/_/-}/submodules/qtsvg-everywhere-src-${pkgver/_/-}.tar.xz"
+
+
+build() {
+   # It's qcc here, but compiled with clang on the selfhosted system
+    if [[ $CARCH == "x86_64" ]]; then
+        _triplet="qnx-x86-64-qcc"
+    elif [[ $CARCH == "aarch64" ]]; then
+        _triplet="qnx-aarch64le-qcc"
+    else
+        die "$CARCH not supported"
+    fi
+
+    # Clang does not support fortify source on QNX
+    _extra_flags="-U_FORTIFY_SOURCE"
+    _warn="-Wno-character-conversion"
+
+    export CC=clang
+    export CXX=clang++
+    export CFLAGS="$_extra_flags $_warn"
+    export CXXFLAGS="$_extra_flags $_warn"
+    export LDFLAGS="-lsocket"
+    export LD_LIBRARY_PATH="$builddir/build/lib:$LD_LIBRARY_PATH"
+    
+    cmake -B build -G Ninja \
+        -DCMAKE_SKIP_RPATH=ON \
+        -DQT_QMAKE_TARGET_MKSPEC=$_triplet \
+        -DCMAKE_INTERPROCEDURAL_OPTIMIZATION=OFF \
+        -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+        -DCMAKE_INSTALL_PREFIX=/usr \
+        -DCMAKE_MESSAGE_LOG_LEVEL=STATUS \
+        -DFEATURE_pkg_config=ON
+
+    cmake --build build --parallel
+}
+
+package() {
+    DESTDIR="$pkgdir" cmake --install build
+}
+
+dev() {
+    default_dev
+
+    amove usr/lib/qt6/sbom
+}
+
+sha512sums="
+5f185575b7bc865068dce567a653b7603ef6b4ec44034f18534ad7d389a29d7137d6de132d2a962f0b83c4ce21edb22956ec4b03e37d93d5bdc81d55f7f8d39a  qtsvg-everywhere-src-6.10.0.tar.xz
+"
